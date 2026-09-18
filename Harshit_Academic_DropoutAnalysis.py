@@ -7,7 +7,8 @@ frontend (all HTML/CSS/JS rendered as Python f-strings, zero external templates)
 Dataset : UCI "Predict Students' Dropout and Academic Success"
 URL     : https://archive.ics.uci.edu/dataset/697/predict+students+dropout+and+academic+success
 
-Run     : python app.py
+Run     : python Harshit_Academic_DropoutAnalysis.py
+Deploy  : gunicorn Harshit_Academic_DropoutAnalysis:app
 Browser : http://127.0.0.1:5000
 """
 
@@ -16,23 +17,32 @@ Browser : http://127.0.0.1:5000
 # ─────────────────────────────────────────────────────────────────────────────
 import os
 import json
-import warnings
+import threading
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
-from flask import Flask, request, jsonify, redirect, url_for
+from flask import Flask, request, jsonify
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
-warnings.filterwarnings("ignore")
+# FIX 1: Never call warnings.filterwarnings() at module level — it conflicts
+# with Gunicorn's internal warning filters on Python 3.12+ (causes
+# "TypeError: ignore() got an unexpected keyword argument 'type'").
+# Scope it inside each function that needs it instead (see train_model).
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Flask app
 # ─────────────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+
+# FIX 2: Gunicorn forks workers AFTER module import, so bootstrap() must run
+# inside the application context on the first request, not at import time.
+# _bootstrapped guards ensure it runs exactly once per worker process.
+_bootstrapped  = False
+_bootstrap_lock = threading.Lock()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Global state
@@ -190,6 +200,11 @@ def load_data() -> pd.DataFrame:
     return df
 
 def train_model(df: pd.DataFrame):
+    import warnings
+    # Scope warning suppression here only — safe from Gunicorn's filter chain
+    warnings.filterwarnings("ignore", category=UserWarning)
+    warnings.filterwarnings("ignore", category=FutureWarning)
+
     global MODEL, SCALER, FEATURE_NAMES, LABEL_ENC, MODEL_METRICS
     features = [c for c in df.columns if c != "Target"]
     FEATURE_NAMES = features
@@ -1221,20 +1236,45 @@ def api_overview():
     })
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Bootstrap
+# Bootstrap — safe for Gunicorn multi-worker fork model
 # ─────────────────────────────────────────────────────────────────────────────
 def bootstrap():
-    global DF
-    os.makedirs(os.path.join(os.path.dirname(__file__), "data"), exist_ok=True)
-    DF = load_data()
-    train_model(DF)
-    print(f"[OK] {len(DF):,} records loaded  |  "
-          f"Model accuracy: {MODEL_METRICS['accuracy']}%  |  "
-          f"Classes: {MODEL_METRICS['classes']}")
-    print("[  ] Dashboard: http://127.0.0.1:5000")
+    """Load data and train model. Thread-safe; runs once per worker process."""
+    global DF, _bootstrapped
+    with _bootstrap_lock:
+        if _bootstrapped:
+            return
+        # FIX 2 cont.: clear any stale .pyc that causes line-number mismatches
+        import glob as _glob
+        for _pyc in _glob.glob(os.path.join(os.path.dirname(__file__),
+                                             "__pycache__", "*.pyc")):
+            try:
+                os.remove(_pyc)
+            except OSError:
+                pass
+
+        os.makedirs(os.path.join(os.path.dirname(__file__), "data"), exist_ok=True)
+        DF = load_data()
+        train_model(DF)
+        _bootstrapped = True
+        print(f"[OK] {len(DF):,} records loaded  |  "
+              f"Model accuracy: {MODEL_METRICS['accuracy']}%  |  "
+              f"Classes: {MODEL_METRICS['classes']}")
+        print("[  ] Dashboard running")
+
+
+# FIX 3: Use before_request guard instead of @before_first_request
+# (@before_first_request was removed in Flask 3.x).
+# This runs bootstrap() lazily on the very first request in each worker,
+# which is the correct pattern for Gunicorn pre-fork workers.
+@app.before_request
+def ensure_bootstrapped():
+    if not _bootstrapped:
+        bootstrap()
+
 
 if __name__ == "__main__":
     bootstrap()
-    port = int(os.environ.get("PORT", 5000))
+    port  = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_ENV", "production") != "production"
     app.run(debug=debug, host="0.0.0.0", port=port, use_reloader=False)
