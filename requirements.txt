@@ -1,35 +1,14 @@
-# ─────────────────────────────────────────────────────────────────
-# Academic Dropout Risk Dashboard — Python Dependencies
-# ─────────────────────────────────────────────────────────────────
-# Install:  pip install -r requirements.txt
-# Python:   >= 3.9
-# ─────────────────────────────────────────────────────────────────
+flask>=3.0.0
+gunicorn>=21.2.0
+numpy>=1.26.0
+pandas>=2.1.0
+scikit-learn>=1.4.0
+plotly>=5.20.0
+joblib>=1.3.0
 
-# ── Web framework ─────────────────────────────────────────────────
-flask>=3.0.0                  # Flask, request, jsonify, redirect, url_for
-
-# ── Production WSGI server (required for Google Cloud Run) ────────
-gunicorn>=21.2.0              # Production-grade WSGI server
-
-# ── Data handling ─────────────────────────────────────────────────
-numpy>=1.26.0                 # array maths, random generator
-pandas>=2.1.0                 # DataFrame, groupby, cut, value_counts
-
-# ── Machine learning ──────────────────────────────────────────────
-scikit-learn>=1.4.0           # RandomForestClassifier, StandardScaler,
-                              # LabelEncoder, train_test_split, metrics
-
-# ── Interactive charting ──────────────────────────────────────────
-plotly>=5.20.0                # plotly.graph_objects (go), plotly.io (pio)
-
-# ── Serialisation helper ──────────────────────────────────────────
-joblib>=1.3.0                 # pulled in by scikit-learn
-flask==3.0.3
-gunicorn==22.0.0
-pandas==2.2.2
-scikit-learn==1.5.1
-numpy==1.26.4
-# ─────────────────────────────────────────────────────────────────
-# Standard-library modules (no install needed)
-#   os, json, warnings
-# ─────────────────────────────────────────────────────────────────
+# ── Standard-library modules (no install needed — built into Python) ──────────
+# os          — file paths, makedirs, environ
+# json        — JSON serialisation
+# threading   — thread-safe bootstrap lock for Gunicorn workers
+# glob        — stale .pyc cleanup on startup
+# warnings    — imported locally inside train_model() only
