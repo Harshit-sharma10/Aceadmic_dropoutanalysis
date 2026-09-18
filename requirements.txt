@@ -24,7 +24,11 @@ plotly>=5.20.0                # plotly.graph_objects (go), plotly.io (pio)
 
 # ── Serialisation helper ──────────────────────────────────────────
 joblib>=1.3.0                 # pulled in by scikit-learn
-
+flask==3.0.3
+gunicorn==22.0.0
+pandas==2.2.2
+scikit-learn==1.5.1
+numpy==1.26.4
 # ─────────────────────────────────────────────────────────────────
 # Standard-library modules (no install needed)
 #   os, json, warnings
